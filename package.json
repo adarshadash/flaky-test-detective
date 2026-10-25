@@ -1,0 +1,49 @@
+{
+  "name": "flaky-test-detective",
+  "version": "0.1.0",
+  "description": "Reruns flaky Playwright tests under controlled variations, finds the root cause, and uses Claude to propose and verify a fix.",
+  "main": "src/index.js",
+  "scripts": {
+    "demo:server": "node demo-site/server.mjs",
+    "test": "node --test \"test/unit/*.test.js\"",
+    "test:integration": "node --test --test-concurrency=1 \"test/integration/*.int.test.js\"",
+    "test:all": "npm test && npm run test:integration",
+    "demo": "node bin/ftd.js investigate examples/flaky --runs 6"
+  },
+  "keywords": [
+    "playwright",
+    "flaky-tests",
+    "ai",
+    "claude",
+    "qa",
+    "test-automation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0"
+  },
+  "type": "module",
+  "bin": {
+    "ftd": "./bin/ftd.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./fixture": "./src/fixture.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@playwright/test": ">=1.45"
+  }
+}

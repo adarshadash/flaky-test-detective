@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlakyMart</title>
+  <style>
+    :root { --bg:#f7f6f2; --ink:#1d1d1b; --accent:#0f766e; --card:#fff; --muted:#6b6b66; }
+    * { box-sizing: border-box; }
+    body { margin:0; font:16px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+    header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #e3e1da; }
+    h1 { font-size:20px; margin:0; }
+    #greeting { color:var(--muted); font-size:14px; }
+    main { max-width:720px; margin:0 auto; padding:20px; }
+    #search { width:100%; padding:10px 12px; border:1px solid #d6d3ca; border-radius:8px; margin-bottom:16px; }
+    ul { list-style:none; padding:0; margin:0; display:grid; gap:10px; }
+    li { background:var(--card); border:1px solid #e3e1da; border-radius:10px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; }
+    button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:8px 12px; cursor:pointer; }
+    #cart { font-weight:600; }
+    #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px; opacity:0; transition:opacity .25s; pointer-events:none; }
+    #toast.show { opacity:1; }
+    #loading { color:var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>FlakyMart</h1>
+      <div id="greeting" data-testid="greeting"></div>
+    </div>
+    <div>Cart: <span id="cart" data-testid="cart-count">0</span></div>
+  </header>
+  <main>
+    <input id="search" data-testid="search" placeholder="Search parts…" />
+    <p id="loading" data-testid="loading">Loading products…</p>
+    <ul id="products" data-testid="products"></ul>
+  </main>
+  <div id="toast" data-testid="toast" role="status"></div>
+
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const sid = qs.get('sid');                       // optional per-test cart isolation
+    const sort = qs.get('sort');                     // optional deterministic ordering
+    const withSid = (u) => sid ? u + (u.includes('?') ? '&' : '?') + 'sid=' + encodeURIComponent(sid) : u;
+
+    // Environment-dependent UI: greeting is based on the *browser's* local hour.
+    const hour = new Date().getHours();
+    document.getElementById('greeting').textContent = hour < 12 ? 'Good morning, engineer' : 'Good evening, engineer';
+
+    let all = [];
+    const list = document.getElementById('products');
+
+    function render(items) {
+      list.innerHTML = '';
+      for (const p of items) {
+        const li = document.createElement('li');
+        li.dataset.testid = 'product';
+        li.setAttribute('data-testid', 'product');
+        li.innerHTML = `<span><strong class="name">${p.name}</strong> · $${p.price}</span>`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Add';
+        btn.setAttribute('data-testid', 'add-' + p.id);
+        btn.onclick = () => add(p);
+        li.appendChild(btn);
+        list.appendChild(li);
+      }
+    }
+
+    async function refreshCart() {
+      const items = await (await fetch(withSid('/api/cart'))).json();
+      document.getElementById('cart').textContent = items.length;
+    }
+
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      // The toast shows up after a random delay and disappears 1.2s later.
+      setTimeout(() => {
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1200);
+      }, 150 + Math.floor(Math.random() * 650));
+    }
+
+    async function add(p) {
+      await fetch(withSid('/api/cart'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: p.id }),
+      });
+      await refreshCart();
+      toast(`Added ${p.name}`);
+    }
+
+    document.getElementById('search').addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase();
+      // search is debounced, so results update a little later than typing
+      clearTimeout(window.__deb);
+      window.__deb = setTimeout(() => render(all.filter((p) => p.name.toLowerCase().includes(q))), 300);
+    });
+
+    (async () => {
+      all = await (await fetch('/api/products' + (sort ? '?sort=' + sort : ''))).json();
+      document.getElementById('loading').remove();
+      render(all);
+      refreshCart();
+    })();
+  </script>
+</body>
+</html>

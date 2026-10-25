@@ -1,0 +1,7 @@
+node_modules/
+test-results/
+playwright-report/
+ftd-report/
+.ftd-it/
+examples/.ftd-it/
+*.ftd-backup
