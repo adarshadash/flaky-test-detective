@@ -22,6 +22,7 @@ Options:
       --pr                  commit verified fixes on a branch and open a PR (gh)
       --model <id>          Claude model (default $FTD_MODEL or claude-sonnet-5-5)
       --context <text>      extra application context for Claude
+      --max-diagnoses <n>   at most n Claude calls (worst tests first) — caps API cost
       --fail-on-flaky       exit 1 if any flaky test is found (for CI)
   -h, --help
 
@@ -44,6 +45,7 @@ async function main(argv) {
       pr: { type: 'boolean', default: false },
       model: { type: 'string' },
       context: { type: 'string' },
+      'max-diagnoses': { type: 'string' },
       'fail-on-flaky': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h', default: false },
     },
@@ -80,6 +82,7 @@ async function main(argv) {
     pr: values.pr,
     model: values.model,
     appContext: values.context,
+    maxDiagnoses: values['max-diagnoses'] ? Number(values['max-diagnoses']) : Infinity,
     onProgress: (e) => {
       if (e.phase === 'start') process.stdout.write(`  ▸ ${e.variation.padEnd(14)} `);
       if (e.phase === 'done') console.log(`done in ${(e.wallMs / 1000).toFixed(1)}s`);

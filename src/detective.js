@@ -61,6 +61,7 @@ export async function investigate(o) {
     appContext,
     model,
     config,
+    maxDiagnoses = Infinity,
   } = o;
   const variations = resolveVariations(o.variations);
   const started = Date.now();
@@ -70,14 +71,19 @@ export async function investigate(o) {
   const tests = groupByTest(attempts);
   if (!tests.length) throw new Error(`No tests were executed for "${target}"${grep ? ` matching "${grep}"` : ''}`);
 
+  // Worst offenders first, so a Claude budget (maxDiagnoses) is spent where it matters most.
+  const analysed = tests.map((t) => ({ t, analysis: analyzeTest(t) })).sort((a, b) => b.analysis.overall.rate - a.analysis.overall.rate);
+  let diagnosesUsed = 0;
   const results = [];
-  for (const t of tests) {
-    const analysis = analyzeTest(t);
+  for (const { t, analysis } of analysed) {
     const { path: sourcePath, source } = await readSource(t.absFile, t.file, cwd, testDir);
     const heuristic = classify(analysis, source);
     const entry = { analysis, heuristic, sourcePath, diagnosis: null, fix: null, traces: t.attempts.filter((a) => a.trace).slice(0, 3).map((a) => a.trace) };
 
-    if (analysis.verdict === 'flaky' && client) {
+    if (analysis.verdict === 'flaky' && client && diagnosesUsed >= maxDiagnoses) {
+      entry.diagnosisSkipped = `Claude budget reached (--max-diagnoses ${maxDiagnoses})`;
+    } else if (analysis.verdict === 'flaky' && client) {
+      diagnosesUsed++;
       onProgress({ phase: 'diagnose', test: t.title });
       try {
         entry.diagnosis = await diagnose({ client, model, analysis, heuristic, source, attempts: t.attempts, appContext });

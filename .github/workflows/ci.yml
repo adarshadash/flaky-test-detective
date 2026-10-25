@@ -1,12 +1,29 @@
 name: CI
 
+# Token budget: the automatic jobs (unit + integration) NEVER call the Claude API —
+# integration tests use a scripted Claude stand-in. Claude is only called by the
+# manual "detective" job, and at most once per run, on the cheapest model.
+
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      use_claude:
+        description: 'Call Claude for a diagnosis (1 API call, Haiku). Off = rule-based, 0 tokens.'
+        type: boolean
+        default: false
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  unit:
+    name: Unit tests (no browser, no tokens)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,16 +31,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Unit tests
-        run: npm test
-      - name: Integration tests (real browser vs demo site)
-        run: npm run test:integration
+      - run: npm test
 
-  # Example: hunt for flaky tests on every PR and post the report as a job summary.
-  detective:
+  integration:
+    name: Integration tests (real browser, no tokens)
+    # Slower (~5 min): only on pushes to main and manual runs, not on every PR.
+    if: github.event_name != 'pull_request'
+    needs: unit
     runs-on: ubuntu-latest
-    needs: test
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,12 +48,40 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Investigate demo suite
+      - run: npm run test:integration
+
+  detective:
+    name: Detective demo (manual only)
+    if: github.event_name == 'workflow_dispatch'
+    needs: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Investigate one flaky test (small run)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: node bin/ftd.js investigate examples/flaky --runs 4 || true
-      - run: cat ftd-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          # The key is only passed when you tick "use_claude"; otherwise 0 tokens are used.
+          ANTHROPIC_API_KEY: ${{ inputs.use_claude && secrets.ANTHROPIC_API_KEY || '' }}
+          FTD_MODEL: claude-haiku-5-5
+          FTD_MAX_TOKENS: '1500'
+        run: >
+          node bin/ftd.js investigate examples/flaky/race.spec.js
+          --variations slow-network --runs 3 --max-diagnoses 1
+      - name: Add report to job summary
+        if: always()
+        run: cat ftd-report/report.md >> "$GITHUB_STEP_SUMMARY" || true
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: flaky-test-detective-report
-          path: ftd-report/
+          path: |
+            ftd-report/index.html
+            ftd-report/report.md
+            ftd-report/report.json
+          retention-days: 7

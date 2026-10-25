@@ -90,3 +90,9 @@ test('defaultClient is null without ANTHROPIC_API_KEY (tool still works rule-bas
   if (saved === undefined) delete process.env.ANTHROPIC_API_KEY;
   else process.env.ANTHROPIC_API_KEY = saved;
 });
+
+test('diagnose respects a max_tokens budget', async () => {
+  const client = fakeClient(goodDiagnosis());
+  await diagnose({ client, maxTokens: 1500, ...evidence() });
+  assert.equal(client.calls[0].max_tokens, 1500);
+});

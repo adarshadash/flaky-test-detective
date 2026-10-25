@@ -110,6 +110,7 @@ ftd investigate <test-file-or-dir> [options]
       --pr                  commit verified fixes on a branch and open a PR (gh)
       --model <id>          Claude model (default $FTD_MODEL or claude-sonnet-5-5)
       --context <text>      extra application context for Claude
+      --max-diagnoses <n>   at most n Claude calls (worst tests first) — caps API cost
       --fail-on-flaky       exit 1 if any flaky test is found (for CI)
 ftd variations              list variations
 ```
@@ -139,7 +140,7 @@ examples/fixed      reference fixes
 ## Tests
 
 ```bash
-npm test                  # 82 unit tests — deterministic, no browser
+npm test                  # 84 unit tests — deterministic, no browser
 npm run test:integration  # 14 real-browser tests against the demo site
 ```
 
@@ -147,6 +148,19 @@ The integration suite proves that each variation really perturbs the browser (la
 CPU work measurably slower, frozen clock, timezone), that every planted flaky test is attributed
 to the right root cause while the stable test is never accused, and that the fix loop keeps a
 correct fix and rolls back a fake one.
+
+## CI and token cost
+
+The GitHub workflow is built to spend almost no Claude tokens:
+
+| Job | When | Claude calls |
+|---|---|---|
+| Unit tests | every push to main and every PR | 0 |
+| Integration tests (real browser) | pushes to main and manual runs | 0 (scripted Claude stand-in) |
+| Detective demo | **manual only** (Actions → CI → Run workflow) | 0 by default; **1** Haiku call if you tick *use_claude* |
+
+To enable the optional Claude call, add `ANTHROPIC_API_KEY` under Settings → Secrets and variables → Actions.
+Locally you can cap spend the same way: `--max-diagnoses 1` and `FTD_MODEL=claude-haiku-5-5`.
 
 ## License
 

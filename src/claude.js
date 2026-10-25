@@ -124,12 +124,12 @@ export async function defaultClient() {
  * Ask Claude for a diagnosis. `client` must expose messages.create (the Anthropic SDK shape).
  * Retries once with the parse error fed back if the first reply is malformed.
  */
-export async function diagnose({ client, model = DEFAULT_MODEL, ...promptInput }) {
+export async function diagnose({ client, model = DEFAULT_MODEL, maxTokens = Number(process.env.FTD_MAX_TOKENS) || 4000, ...promptInput }) {
   if (!client) return null;
   const messages = [{ role: 'user', content: buildPrompt(promptInput) }];
   let lastError;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await client.messages.create({ model, max_tokens: 4000, system: SYSTEM_PROMPT, messages });
+    const res = await client.messages.create({ model, max_tokens: maxTokens, system: SYSTEM_PROMPT, messages });
     const text = (res.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('');
     try {
       return { ...parseDiagnosis(text), model, usage: res.usage ?? null };

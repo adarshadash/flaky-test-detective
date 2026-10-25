@@ -156,3 +156,26 @@ test('investigate: errors clearly when nothing matched', async () => {
   await assert.rejects(investigate({ target: 'tests', grep: 'nope', runs: 1, variations: 'baseline', cwd: dir, exec }), /No tests were executed for "tests" matching "nope"/);
   await rm(dir, { recursive: true, force: true });
 });
+
+test('investigate --max-diagnoses: Claude budget is spent on the worst test first, then stops', async () => {
+  const dir = await project();
+  // two flaky tests: "bad" fails 4/6 in slow-network, "mild" fails 1/6
+  const exec = async (cmd, args, { env }) => {
+    const v = JSON.parse(env.FTD_VARIATION).name;
+    const results = [];
+    for (let i = 0; i < 6; i++) {
+      results.push({ title: 'mild', status: v === 'slow-network' && i === 0 ? 'failed' : 'passed' });
+      results.push({ title: 'bad', status: v === 'slow-network' && i < 4 ? 'failed' : 'passed' });
+    }
+    await writeFile(env.PLAYWRIGHT_JSON_OUTPUT_NAME, JSON.stringify(fakeReport(results, { file: 'demo.spec.js', rootDir: path.join(dir, 'tests') })));
+    return { code: 1, stdout: '', stderr: '' };
+  };
+  const client = fakeClient(goodDiagnosis());
+  const inv = await investigate({ target: 'tests', runs: 6, variations: 'slow-network', cwd: dir, testDir: 'tests', exec, client, maxDiagnoses: 1 });
+  assert.equal(client.calls.length, 1, 'exactly one API call');
+  const by = Object.fromEntries(inv.results.map((r) => [r.analysis.title, r]));
+  assert.ok(by.bad.diagnosis, 'worst test diagnosed');
+  assert.equal(by.mild.diagnosis, null);
+  assert.match(by.mild.diagnosisSkipped, /budget reached/);
+  await rm(dir, { recursive: true, force: true });
+});
